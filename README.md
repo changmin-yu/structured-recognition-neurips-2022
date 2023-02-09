@@ -4,6 +4,12 @@ Python codes for the Structured Recognition non-linear Gaussian Process Factor A
 
 For any question regarding the paper or the code, please contact changmin.yu98[at]gmail.com and maneesh[at]gatsby.ucl.ac.uk
 
+For executing the codes, try running:
+
+```
+python experiments/place_cell.py --model sr-nlgpfa
+```
+
 If you find the paper or the code helpful for your research, please consider citing us with the following format:
 
 ```
