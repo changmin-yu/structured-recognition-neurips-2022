@@ -5,10 +5,10 @@ import numpy as np
 from typing import Union
 import copy
 
-from utils.matrix import add_diagonal
-from likelihoods.base import Likelihood
-from kernels.kernels import Kernel
-from kernels.composition import KernelList
+from gpvae.utils.matrix import add_diagonal
+from gpvae.likelihoods.base import Likelihood
+from gpvae.kernels.kernels import Kernel
+from gpvae.kernels.composition import KernelList
 
 JITTER = 1e-5
 
@@ -313,12 +313,12 @@ class SGPVAE(GPVAE):
 
 class SR_nlGPFA(GPVAE):
     def __init__(self, recog_model: Likelihood, gen_model: Likelihood, latent_dim: int, kernel: Union[list, Kernel], 
-                 z: torch.Tensor, add_jitter: bool=False, fixed_induing: bool=False, h_dim: int=20, affine_weight: torch.Tensor=None, 
+                 z: torch.Tensor, add_jitter: bool=False, fixed_inducing: bool=False, h_dim: int=20, affine_weight: torch.Tensor=None, 
                  affine_bias: torch.Tensor=None, device=torch.device('cpu'), orthogonal_reg: float=0.0):
         super().__init__(recog_model=recog_model, gen_model=gen_model, latent_dim=latent_dim, kernel=kernel, 
                          add_jitter=add_jitter, device=device)
         
-        self.z = nn.Parameter(z.to(self.device), requires_grad=not fixed_induing)
+        self.z = nn.Parameter(z.to(self.device), requires_grad=not fixed_inducing)
         self.num_inducing = z.shape[0]
         self.h_dim = h_dim
         self.affine_weight = nn.Parameter(torch.eye(h_dim, device=self.device) if affine_weight is None else affine_weight, 
@@ -370,12 +370,12 @@ class SR_nlGPFA(GPVAE):
         pf = self.pf(x, diag)
         pf_cov, pf_chol = pf.covariance_matrix, pf.scale_tril
         
-        qf_mu = F_mat.matmul(qu_mu).squeeze(-1)
+        qf_mu = F_mat.matmul(qu_mu)
         K_n = torch.diagonal(pf_cov, dim1=-2, dim2=-1).transpose(-1, -2).diag_embed()
         qf_cov = K_n + F_mat.matmul(qu_cov - pu_cov).matmul(F_mat.transpose(-1, -2))
         qf = MultivariateNormal(qf_mu, qf_cov)
         
-        qh_mu = C_mat.matmul(qf_mu) + d_vec
+        qh_mu = C_mat.matmul(F_mat).matmul(qu_mu) + d_vec
         qh_cov = C_mat.matmul(qf_cov).matmul(C_mat.transpose(-1, -2)) + self.add_jitter * JITTER * \
             torch.eye(self.h_dim, device=self.device).unsqueeze(0).repeat((batch_size, 1, 1))
         qh = MultivariateNormal(qh_mu, qh_cov)
@@ -388,7 +388,7 @@ class SR_nlGPFA(GPVAE):
             ksf = self.kernels.forward(x_test, x)
             kfs = ksf.transpose(-1, -2)
             
-            b1 = torch.linalg.solve_triangular(pf_chol, qf_mu.unsqueeze(2), upper=False)
+            b1 = torch.linalg.solve_triangular(pf_chol, qf_mu, upper=False)
             
             e = torch.linalg.solve_triangular(pf_chol, kfs)
             f = pf_cov - qf_cov
@@ -443,7 +443,7 @@ class SR_nlGPFA(GPVAE):
             else:
                 qf = self.pf(x_test)
         else:
-            qf = self.qf(x=x, y=y, x_test=x_test, full_cov=full_cov)
+            qf, _, _, _ = self.qf(x=x, y=y, x_test=x_test, full_cov=full_cov)
         
         if full_cov:
             f_samples = qf.sample((num_samples, ))
@@ -455,7 +455,7 @@ class SR_nlGPFA(GPVAE):
         y_mus, y_samples = [], []
         
         for f in f_samples:
-            py_f = self.gen_model(f.T)
+            py_f = self.gen_model(f)
             y_mus.append(py_f.mean)
             y_samples.append(py_f.sample())
         

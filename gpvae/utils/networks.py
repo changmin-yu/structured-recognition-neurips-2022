@@ -7,16 +7,19 @@ class MLP(nn.Module):
         
         self.nonlinearity = nonlinearity
         
-        in_dims = [in_dim] + hidden_dims[:-1]
-        out_dims = hidden_dims[1:] + [out_dim]
+        in_dims = [in_dim] + hidden_dims
+        out_dims = hidden_dims + [out_dim]
         
-        self.network = nn.ModuleList()
+        network = nn.ModuleList()
         i = 0
         for (dim1, dim2) in zip(in_dims, out_dims):
             if i < (len(in_dims)-1):
-                self.network.extend([nn.Linear(dim1, dim2), nonlinearity()])
+                network.extend([nn.Linear(dim1, dim2), nonlinearity()])
             else:
-                self.network.append(nn.Linear(dim1, dim2))
+                network.append(nn.Linear(dim1, dim2))
+            i += 1
+
+        self.network = nn.Sequential(*network)
         
         self.init_params()
     

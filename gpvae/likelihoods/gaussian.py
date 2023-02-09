@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.distributions import Normal
-from utils.networks import MLP
+from gpvae.utils.networks import MLP
 from .base import Likelihood
 
 class NNHomoGaussian(Likelihood):

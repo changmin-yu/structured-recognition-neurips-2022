@@ -15,6 +15,7 @@ from gpvae.kernels.kernels import SEKernel
 from gpvae.likelihoods.gaussian import NNHomoGaussian, NNHeteroGaussian
 from gpvae.likelihoods.poisson import NNPoissonCount
 from gpvae.models.models import VAE, GPVAE, SGPVAE, SR_nlGPFA
+import gpvae.utils.evaluation as evaluation
 
 torch.set_default_dtype(torch.float64)
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -77,7 +78,7 @@ def main(args):
         z_init = torch.linspace(0, x[-1].item(), steps=args.num_inducing).unsqueeze(1)
         init_affine_weight = torch.randn((args.h_dim, args.latent_dim))
         init_affine_bias = torch.zeros((args.h_dim, ))
-        model = SR_nlGPFA(recog_model=recog_model, gen_model=gen_model, latent_dim=latent_dim, kernel=kernel, 
+        model = SR_nlGPFA(recog_model=recog_model, gen_model=gen_model, latent_dim=args.latent_dim, kernel=kernel, 
                       z=z_init, add_jitter=args.add_jitter, fixed_inducing=args.fixed_inducing, h_dim=args.h_dim, 
                       affine_weight=init_affine_weight, affine_bias=init_affine_bias, device=DEVICE, 
                       orthogonal_reg=args.orthogonal_reg)
@@ -94,7 +95,7 @@ def main(args):
         losses = []
         counter = 0
         model.train()
-        for batch in load:
+        for batch in loader:
             x_b, y_b, _ = batch
             x_b = x_b.to(DEVICE)
             y_b = y_b.to(DEVICE)
@@ -111,53 +112,51 @@ def main(args):
         
         if epoch % args.cache_freq == 0:
             model.eval()
-            elbo_test = 0.0
+            fe_test = 0.0
             smse_test = 0.0
             for test_batch in test_loader:
                 x_test_b, y_test_b, _ = test_batch
                 x_test_b = x_test_b.to(DEVICE)
                 y_test_b = y_test_b.to(DEVICE)
-                elbo_b = model.elbo(x_test_b, y_test_b, num_samples=1)
-                elbo_test = elbo_test + elbo_b * x_test_b.shape[0]
+                fe_b = model.free_energy(x_test_b, y_test_b, num_samples=1)
+                fe_test = fe_test + fe_b * x_test_b.shape[0]
                 
-                mean, sigma = model.predict_y(
-                    x=x_test_b, y=y_test_b, mask=None, num_samples=100)[:2]
+                mean, sigma = model.generation(x=x_test_b, y=y_test_b, num_samples=100)[:2]
 
                 mean, sigma = mean.cpu().detach().numpy(), sigma.cpu().detach().numpy()
                 
-                smse_b = gpvae.utils.evaluation.smse(mean, y_test_b.detach().cpu().numpy()).mean()
+                smse_b = evaluation.smse(mean, y_test_b.detach().cpu().numpy()).mean()
                 
                 smse_test = smse_test + smse_b * x_test_b.shape[0]
             smse_test = smse_test / test_dataset.x.shape[0]
             
-            tqdm.tqdm.write('TEST-ELBO: {:.3f} | TRAIN-ELBO: {:.3f} | TEST-SMSE: {:.3f}'.format(elbo_test.item(), \
+            tqdm.tqdm.write('TEST-Free-Energy: {:.3f} | TRAIN-Free-Energy: {:.3f} | TEST-SMSE: {:.3f}'.format(fe_test.item(), \
                 -np.mean(losses) * dataset.y.shape[0], smse_test))
     
     model.eval()
-    elbo_test = 0.0
+    fe_test = 0.0
     smse_test = 0.0
     for test_batch in test_loader:
         x_test_b, y_test_b, _ = test_batch
         x_test_b = x_test_b.to(DEVICE)
         y_test_b = y_test_b.to(DEVICE)
-        elbo_b = model.elbo(x_test_b, y_test_b, num_samples=1)
-        elbo_test = elbo_test + elbo_b * x_test_b.shape[0]
+        fe_b = model.free_energy(x_test_b, y_test_b, num_samples=1)
+        fe_test = fe_test + fe_b * x_test_b.shape[0]
         
-        mean, sigma = model.predict_y(
-            x=x_test_b, y=y_test_b, mask=None, num_samples=100)[:2]
+        mean, sigma = model.generation(x=x_test_b, y=y_test_b, num_samples=100)[:2]
 
         mean, sigma = mean.cpu().detach().numpy(), sigma.cpu().detach().numpy()
         
-        smse_b = gpvae.utils.evaluation.smse(mean, y_test_b.detach().cpu().numpy()).mean()
+        smse_b = evaluation.smse(mean, y_test_b.detach().cpu().numpy()).mean()
         
         smse_test = smse_test + smse_b * x_test_b.shape[0]
     smse_test = smse_test / test_dataset.x.shape[0]
     
     print('\nSMSE: {:.3f}'.format(smse_test))
-    print('ELBO: {:.3f}'.format(elbo_test))
+    print('Free-Energy: {:.3f}'.format(fe_test))
     
     if args.save:
-        metrics = {'TEST-ELBO': elbo_test, 'SMSE': smse_test}
+        metrics = {'TEST-Free-Energy': fe_test, 'SMSE': smse_test}
         save(vars(args), metrics, model, seed=args.seed)
         
 if __name__ == '__main__':
@@ -188,6 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--cache_freq', default=100, type=int)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--lr', default=1e-4, type=float)
+    parser.add_argument('--orthogonal-reg', default=False, type=bool)
 
     # General.
     parser.add_argument('--save', default=True, type=bool)

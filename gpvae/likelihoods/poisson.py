@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from torch.distributions import Poisson
-from utils.networks import MLP
+from gpvae.utils.networks import MLP
 from .base import Likelihood
 
 class PoissonCount(Likelihood):
@@ -19,7 +19,7 @@ class NNPoissonCount(Likelihood):
         self.network = MLP(in_dim, out_dim, hidden_dims, nonlinearity)
         self.likelihood = PoissonCount()
     
-    def forwrard(self, x):
+    def forward(self, x):
         rate = self.network(x)
         rate = torch.exp(rate)
         return self.likelihood(rate)
