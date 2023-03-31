@@ -68,3 +68,5 @@ temp*/
 *.pdf
 *.png
 *.tar
+
+logdir/
