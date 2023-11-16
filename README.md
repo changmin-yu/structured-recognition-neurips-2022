@@ -6,8 +6,19 @@ For any question regarding the paper or the code, please contact changmin.yu98[a
 
 For executing the codes, try running:
 
+- SR-nlGPFA
 ```
 python experiments/place_cell.py --model sr-nlgpfa
+```
+
+- treeSRVAE
+```
+python treeSRVAE/treeSRVAE.py --dataset bar_test --tree-structured-gen True
+```
+
+- gmmSRVAE
+```
+python gmmSRVAE/models/SRVAE.py --dataset pinwheel --full-dependency True --seed 0
 ```
 
 If you find the paper or the code helpful for your research, please consider citing us with the following format:
